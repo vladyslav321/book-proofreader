@@ -119,35 +119,19 @@ function handleFile(file){
     }
 }
 
-function checkText(){
+async function checkText() {
     const text = document.getElementById("textInput").value;
-    let output = text;
 
-    // Simple demo rules
-    const rules = [
-        {wrong:"teh", correct:"the"},
-        {wrong:"recieve", correct:"receive"},
-        {wrong:"dont", correct:"don't"},
-        {wrong:"im", correct:"I'm"}
-    ];
-
-    rules.forEach(rule=>{
-        const regex = new RegExp("\\b"+rule.wrong+"\\b","gi");
-        output = output.replace(regex, 
-            `<span class="error">${rule.wrong}</span>
-             <span class="suggestion">(${rule.correct})</span>`
-        );
+    const response = await fetch("http://localhost:3000/check", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ text })
     });
 
-    correctedText = text;
-    rules.forEach(rule=>{
-        const regex = new RegExp("\\b"+rule.wrong+"\\b","gi");
-        correctedText = correctedText.replace(regex, rule.correct);
-    });
+    const data = await response.json();
 
-    document.getElementById("output").innerHTML = output;
+    highlightErrors(text, data.matches);
 }
-
 function applyFixes(){
     document.getElementById("textInput").value = correctedText;
     document.getElementById("output").innerText = correctedText;
