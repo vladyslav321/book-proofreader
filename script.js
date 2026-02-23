@@ -194,11 +194,16 @@ function highlightErrors(text, matches){
 }
 
 function applyFixes(){
+
     let corrected = lastText;
+    let beforeHTML = lastText;
+    let afterHTML = "";
+    let lastIndex = 0;
 
     lastMatches.reverse().forEach(match=>{
         if(match.replacements.length > 0){
             const suggestion = match.replacements[0].value;
+
             corrected =
                 corrected.substring(0, match.offset) +
                 suggestion +
@@ -206,8 +211,31 @@ function applyFixes(){
         }
     });
 
-    document.getElementById("textInput").value = corrected;
-    document.getElementById("output").innerText = corrected;
+    // Build comparison
+    let pointer = 0;
+
+    lastMatches.forEach(match=>{
+        const start = match.offset;
+        const end = start + match.length;
+
+        afterHTML += corrected.substring(pointer, start);
+
+        const newWord = corrected.substring(start, start + (match.replacements[0]?.value.length || match.length));
+        const oldWord = lastText.substring(start, end);
+
+        afterHTML += `<span class="fixed" title="Was: ${oldWord}">
+                        ${newWord}
+                      </span>`;
+
+        pointer = end;
+    });
+
+    afterHTML += corrected.substring(pointer);
+
+    document.getElementById("before").innerText = lastText;
+    document.getElementById("after").innerHTML = afterHTML;
+
+    textInput.value = corrected;
 }
 
 function downloadText(){
