@@ -1,262 +1,203 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Free Book Proofreader (English)</title>
-  <style>
-    body { 
-      font-family: Arial, sans-serif; 
-      max-width: 900px; 
-      margin: 30px auto; 
-      padding: 20px; 
-      line-height: 1.6;
-    }
-    h1 { text-align: center; color: #333; }
-    #drop-zone { 
-      border: 2px dashed #aaa; 
-      padding: 50px; 
-      text-align: center; 
-      margin: 20px 0; 
-      cursor: pointer; 
-      background: #f9f9f9; 
-      border-radius: 8px;
-      transition: all 0.2s;
-    }
-    #drop-zone:hover, #drop-zone:focus { 
-      border-color: #007bff; 
-      background: #e7f3ff; 
-      outline: none;
-    }
-    textarea { 
-      width: 100%; 
-      height: 220px; 
-      margin: 15px 0; 
-      padding: 12px; 
-      font-family: monospace; 
-      font-size: 15px; 
-      border: 1px solid #ccc; 
-      border-radius: 6px;
-      resize: vertical;
-    }
-    button { 
-      padding: 12px 24px; 
-      font-size: 16px; 
-      margin: 10px 6px 0 0; 
-      cursor: pointer; 
-      border: none; 
-      border-radius: 6px; 
-      background: #007bff; 
-      color: white; 
-      transition: background 0.2s;
-    }
-    button:hover { background: #0056b3; }
-    button:disabled { background: #ccc; cursor: not-allowed; }
-    #result { 
-      white-space: pre-wrap; 
-      border: 1px solid #ddd; 
-      padding: 20px; 
-      min-height: 250px; 
-      background: white; 
-      border-radius: 6px; 
-      margin-top: 20px; 
-      line-height: 1.7;
-    }
-    .error { 
-      background: #ffe6e6; 
-      color: #c00; 
-      padding: 2px 4px; 
-      border-radius: 3px; 
-      cursor: help;
-    }
-    .suggestion { 
-      background: #e6ffe6; 
-      color: #006400; 
-      padding: 2px 4px; 
-      border-radius: 3px;
-    }
-    #status { 
-      color: #555; 
-      font-style: italic; 
-      margin: 10px 0; 
-      min-height: 1.2em;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>English Checker</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+  }
+  #drop-area {
+    border: 2px dashed #ccc;
+    padding: 20px;
+    text-align: center;
+    color: #888;
+    margin-bottom: 10px;
+  }
+  #drop-area.dragover {
+    border-color: #000;
+    background-color: #f0f0f0;
+  }
+  textarea {
+    width: 100%;
+    height: 200px;
+    margin-top: 10px;
+  }
+  button {
+    margin: 10px 5px;
+  }
+  #result {
+    white-space: pre-wrap;
+    margin-top: 20px;
+  }
+  .error {
+    background-color: #fdd;
+  }
+  .suggestion {
+    background-color: #dfd;
+  }
+</style>
 </head>
 <body>
-  <h1>Free English Book Proofreader</h1>
-  <p>Upload .txt, .docx or .pdf (chapter or small book) → get grammar & style suggestions. Powered by LanguageTool (free API).</p>
 
-  <label for="file-input" id="drop-zone">
-    Drag & drop your file here<br>or click to select (.txt, .docx, .pdf)
-  </label>
-  <input type="file" id="file-input" accept=".txt,.docx,.pdf" style="display:none;">
+<h1>English Text Checker</h1>
 
-  <textarea id="text-input" placeholder="Or paste your text here..."></textarea>
+<div id="drop-area">
+  Drag & Drop or Paste Text Here
+</div>
+<textarea id="text-input" placeholder="Paste your text here..."></textarea>
 
-  <button id="check-btn">Check Grammar & Style</button>
-  <button id="apply-btn" disabled>Apply Suggested Fixes</button>
-  <button id="download-btn" disabled>Download Corrected Text</button>
+<br/>
 
-  <div id="status"></div>
-  <div id="result"></div>
+<input type="file" id="file-upload" accept=".txt,.docx" />
 
-  <script src="https://unpkg.com/mammoth@1.6.0/mammoth.browser.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.432/pdf.min.mjs" type="module"></script>
-  <script type="module">
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.432/pdf.worker.min.mjs';
+<br/>
 
-    const dropZone = document.getElementById('drop-zone');
-    const fileInput = document.getElementById('file-input');
-    const textInput = document.getElementById('text-input');
-    const checkBtn = document.getElementById('check-btn');
-    const applyBtn = document.getElementById('apply-btn');
-    const downloadBtn = document.getElementById('download-btn');
-    const resultDiv = document.getElementById('result');
-    const status = document.getElementById('status');
+<button id="check-btn">Check English</button>
+<button id="apply-btn" disabled>Apply Fixes</button>
+<button id="download-btn" disabled>Download Corrected Text</button>
 
-    let originalText = '';
-    let matches = [];
-    let correctedText = '';
+<div id="result"></div>
 
-    // Drag & drop
-    dropZone.addEventListener('dragover', e => { 
-      e.preventDefault(); 
-      dropZone.classList.add('highlight'); 
-    });
-    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('highlight'));
-    dropZone.addEventListener('drop', e => {
-      e.preventDefault();
-      dropZone.classList.remove('highlight');
-      handleFile(e.dataTransfer.files[0]);
-    });
+<!-- Include Mammoth.js for .docx parsing -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
 
-    fileInput.addEventListener('change', e => {
-      if (e.target.files[0]) handleFile(e.target.files[0]);
-    });
+<script>
+const dropArea = document.getElementById('drop-area');
+const textInput = document.getElementById('text-input');
+const fileInput = document.getElementById('file-upload');
+const checkBtn = document.getElementById('check-btn');
+const applyBtn = document.getElementById('apply-btn');
+const downloadBtn = document.getElementById('download-btn');
+const resultDiv = document.getElementById('result');
 
-    async function handleFile(file) {
-      if (!file) return;
-      status.textContent = 'Reading file...';
-      textInput.value = '';
+let originalText = '';
+let analyzedText = ''; // Will hold text with error highlights
 
-      try {
-        if (file.name.toLowerCase().endsWith('.txt')) {
-          const text = await file.text();
-          textInput.value = text;
-          status.textContent = 'TXT file loaded. Ready to check.';
-        } 
-        else if (file.name.toLowerCase().endsWith('.docx')) {
-          const arrayBuffer = await file.arrayBuffer();
-          const result = await mammoth.extractRawText({arrayBuffer});
-          textInput.value = result.value;
-          status.textContent = 'DOCX file loaded. Ready to check.';
-        } 
-        else if (file.name.toLowerCase().endsWith('.pdf')) {
-          status.textContent = 'Extracting text from PDF...';
-          const arrayBuffer = await file.arrayBuffer();
-          const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
-          
-          let fullText = '';
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const content = await page.getTextContent();
-            const pageText = content.items.map(item => item.str).join(' ');
-            fullText += pageText + '\n\n';
-            status.textContent = `Extracted page ${i}/${pdf.numPages}...`;
-          }
-          textInput.value = fullText.trim();
-          status.textContent = 'PDF text extracted. Ready to check.';
-        } 
-        else {
-          status.textContent = 'Unsupported format. Please use .txt, .docx or .pdf';
-          return;
-        }
-      } catch (err) {
-        status.textContent = 'Error reading file: ' + err.message;
-        console.error(err);
-      }
-    }
+// Drag & Drop handlers
+dropArea.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropArea.classList.add('dragover');
+});
+dropArea.addEventListener('dragleave', (e) => {
+  e.preventDefault();
+  dropArea.classList.remove('dragover');
+});
+dropArea.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropArea.classList.remove('dragover');
+  const files = e.dataTransfer.files;
+  handleFiles(files);
+});
 
-    checkBtn.addEventListener('click', async () => {
-      const text = textInput.value.trim();
-      if (!text) return alert('Please upload a file or paste text first');
+// Handle file upload
+fileInput.addEventListener('change', () => {
+  handleFiles(fileInput.files);
+});
 
-      status.textContent = 'Checking grammar & style... (5–60 seconds)';
-      resultDiv.innerHTML = '';
+// Handle pasted text
+dropArea.addEventListener('paste', (e) => {
+  e.preventDefault();
+  const text = e.clipboardData.getData('text');
+  textInput.value += text;
+});
 
-      try {
-        const formData = new FormData();
-        formData.append('text', text);
-        formData.append('language', 'en-US');
-        formData.append('enabledOnly', 'false');
-
-        const response = await fetch('https://api.languagetool.org/v2/check', {
-          method: 'POST',
-          body: formData
+// Process files
+function handleFiles(files) {
+  if (files.length === 0) return;
+  const file = files[0];
+  const reader = new FileReader();
+  if (file.name.endsWith('.txt')) {
+    reader.onload = () => {
+      textInput.value = reader.result;
+    };
+    reader.readAsText(file);
+  } else if (file.name.endsWith('.docx')) {
+    reader.onload = (e) => {
+      mammoth.convertToHtml({buffer: e.target.result})
+        .then(function(result) {
+          // Extract plain text from HTML
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = result.value;
+          textInput.value = tempDiv.innerText;
+        })
+        .catch(function(err) {
+          alert('Error reading DOCX file.');
         });
+    };
+    reader.readAsArrayBuffer(file);
+  } else {
+    alert('Unsupported file type.');
+  }
+}
 
-        if (!response.ok) throw new Error(`API returned ${response.status}`);
+// Dummy grammar check function (replace with real API or logic)
+function checkGrammar(text) {
+  // For demo: highlight 'bad' as error, 'good' as suggestion
+  const errors = [];
+  const patternError = /\b(bad)\b/gi;
+  const patternSuggest = /\b(good)\b/gi;
 
-        const data = await response.json();
-        matches = data.matches || [];
-        originalText = text;
-        correctedText = text;
+  let newText = text;
+  let offset = 0;
 
-        if (matches.length === 0) {
-          resultDiv.innerHTML = '<p style="color:green; font-weight:bold;">No issues found! 🎉</p>';
-        } else {
-          let html = text.replace(/\n/g, '<br>');
-          let offset = 0;
+  // Highlight errors in red
+  newText = newText.replace(patternError, (match, p1, offsetPos) => {
+    errors.push({index: offsetPos + offset, length: match.length, type: 'error', message: 'Replace "bad"'});
+    return `<span class="error">${match}</span>`;
+  });
+  // Highlight suggestions in green
+  newText = newText.replace(patternSuggest, (match, p1, offsetPos) => {
+    errors.push({index: offsetPos + offset, length: match.length, type: 'suggestion', message: 'Replace "good"'});
+    return `<span class="suggestion">${match}</span>`;
+  });
 
-          matches.forEach(m => {
-            const start = m.offset + offset;
-            const end = start + m.length;
-            const issue = (m.shortMessage || m.message).replace(/"/g, '&quot;');
-            const repl = m.replacements?.[0]?.value || '';
+  return {text: newText, errors: errors};
+}
 
-            html = html.slice(0, start) +
-                   `<span class="error" title="${issue}">${html.slice(start, end)}</span>` +
-                   (repl ? `<span class="suggestion" title="Suggested: ${repl.replace(/"/g, '&quot;')}">${repl}</span>` : '') +
-                   html.slice(end);
+// Show analyzed text with highlights
+function displayResult() {
+  const text = textInput.value;
+  const result = checkGrammar(text);
+  analyzedText = result.text;
+  resultDiv.innerHTML = result.text;
+  if (result.errors.length > 0) {
+    applyBtn.disabled = false;
+    downloadBtn.disabled = false;
+  } else {
+    applyBtn.disabled = true;
+    downloadBtn.disabled = true;
+  }
+}
 
-            if (repl) {
-              const diff = repl.length - m.length;
-              offset += diff;
-              correctedText = correctedText.slice(0, m.offset + offset - repl.length + m.length) +
-                              repl +
-                              correctedText.slice(m.offset + offset);
-            }
-          });
+// Check button
+document.getElementById('check-btn').addEventListener('click', () => {
+  originalText = textInput.value;
+  displayResult();
+});
 
-          resultDiv.innerHTML = html;
-        }
+// Apply fixes (simple replacements)
+document.getElementById('apply-btn').addEventListener('click', () => {
+  // For demo, just replace 'bad' with 'good'
+  let fixedText = originalText.replace(/\b(bad)\b/gi, 'good');
+  textInput.value = fixedText;
+  displayResult();
+});
 
-        applyBtn.disabled = matches.length === 0;
-        downloadBtn.disabled = false;
-        status.textContent = `Found ${matches.length} potential issues.`;
-      } catch (err) {
-        status.textContent = 'Error during check: ' + err.message + ' (try smaller text or wait a minute)';
-        console.error(err);
-      }
-    });
+// Download corrected text
+downloadBtn.addEventListener('click', () => {
+  const blob = new Blob([textInput.value], {type: 'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'corrected.txt';
+  a.click();
+  URL.revokeObjectURL(url);
+});
 
-    applyBtn.addEventListener('click', () => {
-      textInput.value = correctedText;
-      resultDiv.innerHTML = correctedText.replace(/\n/g, '<br>');
-      status.textContent = 'All suggested fixes applied!';
-    });
+</script>
 
-    downloadBtn.addEventListener('click', () => {
-      const content = correctedText || originalText;
-      const blob = new Blob([content], {type: 'text/plain'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'corrected-manuscript.txt';
-      a.click();
-      URL.revokeObjectURL(url);
-    });
-  </script>
 </body>
 </html>
