@@ -1,126 +1,44 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  
-<!-- Add these script tags in your HTML head or before your script -->
-<script src="https://mozilla.github.io/pdf.js/build/pdf.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
-  
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>English Checker</title>
-<style>
-  body {
-    font-family: Arial, sans-serif;
-    margin: 20px;
-  }
-  #drop-area {
-    border: 2px dashed #ccc;
-    padding: 20px;
-    text-align: center;
-    color: #888;
-    margin-bottom: 10px;
-  }
-  #drop-area.dragover {
-    border-color: #000;
-    background-color: #f0f0f0;
-  }
-  textarea {
-    width: 100%;
-    height: 200px;
-    margin-top: 10px;
-  }
-  button {
-    margin: 10px 5px;
-  }
-  #result {
-    white-space: pre-wrap;
-    margin-top: 20px;
-  }
-  .error {
-    background-color: #fdd;
-  }
-  .suggestion {
-    background-color: #dfd;
-  }
-</style>
+<title>Multi-format Text Loader</title>
+<!-- Include external libraries -->
+<script src="https://mozilla.github.io/pdf.js/build/pdf.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
 </head>
 <body>
-
-<h1>English Text Checker</h1>
-
-<div id="drop-area">
-  Drag & Drop or Paste Text Here
-</div>
-<textarea id="text-input" placeholder="Paste your text here..."></textarea>
-
-<br/>
-
-<input type="file" id="file-upload" accept=".txt,.docx" />
-
-<br/>
-
-<button id="check-btn">Check English</button>
-<button id="apply-btn" disabled>Apply Fixes</button>
-<button id="download-btn" disabled>Download Corrected Text</button>
-
-<div id="result"></div>
-
-<!-- Include Mammoth.js for .docx parsing -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
+<h2>Select a file to load:</h2>
+<input type="file" id="fileInput" />
+<br/><br/>
+<textarea id="textInput" rows="20" cols="100" placeholder="Extracted text will appear here..."></textarea>
 
 <script>
-const dropArea = document.getElementById('drop-area');
-const textInput = document.getElementById('text-input');
-const fileInput = document.getElementById('file-upload');
-const checkBtn = document.getElementById('check-btn');
-const applyBtn = document.getElementById('apply-btn');
-const downloadBtn = document.getElementById('download-btn');
-const resultDiv = document.getElementById('result');
+const fileInput = document.getElementById('fileInput');
+const textInput = document.getElementById('textInput');
 
-let originalText = '';
-let analyzedText = ''; // Will hold text with error highlights
-
-// Drag & Drop handlers
-dropArea.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  dropArea.classList.add('dragover');
-});
-dropArea.addEventListener('dragleave', (e) => {
-  e.preventDefault();
-  dropArea.classList.remove('dragover');
-});
-dropArea.addEventListener('drop', (e) => {
-  e.preventDefault();
-  dropArea.classList.remove('dragover');
-  const files = e.dataTransfer.files;
-  handleFiles(files);
-});
-
-// Handle file upload
 fileInput.addEventListener('change', () => {
   handleFiles(fileInput.files);
 });
 
-// Handle pasted text
-dropArea.addEventListener('paste', (e) => {
-  e.preventDefault();
-  const text = e.clipboardData.getData('text');
-  textInput.value += text;
-});
-
-// Process files
 function handleFiles(files) {
   if (files.length === 0) return;
   const file = files[0];
+  const filename = file.name.toLowerCase();
 
-  if (file.name.endsWith('.txt')) {
+  // Clear previous content
+  textInput.value = '';
+
+  if (filename.endsWith('.txt')) {
     const reader = new FileReader();
     reader.onload = () => {
       textInput.value = reader.result;
     };
     reader.readAsText(file);
-  } else if (file.name.endsWith('.docx')) {
+
+  } else if (filename.endsWith('.docx')) {
     const reader = new FileReader();
     reader.onload = (e) => {
       mammoth.convertToHtml({buffer: e.target.result})
@@ -128,54 +46,81 @@ function handleFiles(files) {
           const tempDiv = document.createElement('div');
           tempDiv.innerHTML = result.value;
           textInput.value = tempDiv.innerText;
+        })
+        .catch(err => {
+          alert('Error parsing DOCX: ' + err);
         });
     };
     reader.readAsArrayBuffer(file);
-  } else if (file.name.endsWith('.pdf')) {
+
+  } else if (filename.endsWith('.pdf')) {
     const reader = new FileReader();
     reader.onload = (e) => {
       const loadingTask = pdfjsLib.getDocument({data: e.target.result});
       loadingTask.promise.then(pdf => {
-        pdf.getPage(1).then(page => {
-          page.getTextContent().then(textContent => {
-            const text = textContent.items.map(item => item.str).join(' ');
-            textInput.value = text;
+        let maxPages = Math.min(pdf.numPages, 10); // limit pages for performance
+        let loadedPages = 0;
+        let fullText = '';
+
+        for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+          pdf.getPage(pageNum).then(page => {
+            page.getTextContent().then(textContent => {
+              const pageText = textContent.items.map(item => item.str).join(' ');
+              fullText += pageText + '\n';
+              loadedPages++;
+              if (loadedPages === maxPages) {
+                textInput.value = fullText;
+              }
+            });
           });
-        });
+        }
+      }).catch(err => {
+        alert('Error loading PDF: ' + err);
       });
     };
     reader.readAsArrayBuffer(file);
-  } else if (file.name.endsWith('.fb2')) {
+
+  } else if (filename.endsWith('.fb2')) {
     const reader = new FileReader();
     reader.onload = () => {
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(reader.result, "application/xml");
-      const strings = xmlDoc.getElementsByTagName('body');
-      let fb2Text = '';
-      for (let i=0; i<strings.length; i++) {
-        fb2Text += strings[i].textContent + '\n';
+      try {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(reader.result, "application/xml");
+        // Extract text from all <body> elements
+        const bodies = xmlDoc.getElementsByTagName('body');
+        let fb2Text = '';
+        for (let i = 0; i < bodies.length; i++) {
+          fb2Text += bodies[i].textContent + '\n';
+        }
+        textInput.value = fb2Text;
+      } catch (err) {
+        alert('Error parsing FB2: ' + err);
       }
-      textInput.value = fb2Text;
     };
     reader.readAsText(file);
-  } else if (file.name.endsWith('.epub')) {
+
+  } else if (filename.endsWith('.epub')) {
     const reader = new FileReader();
     reader.onload = () => {
       const book = ePub(reader.result);
-      book.loaded.navigation.then(toc => {
-        book.renderTo('epub-container'); // optional display
-        // extract text from chapters
+      book.loaded.navigation.then(() => {
+        // Load the spine (chapters)
         book.loaded.spine.then(spine => {
-          let fullText = '';
-          const chapterPromises = spine.spineItems.map(item => {
-            return item.load().then(section => {
+          const spineItems = spine.spineItems;
+          const chapterPromises = spineItems.map(item => item.load());
+
+          Promise.all(chapterPromises).then(sections => {
+            let fullText = '';
+            sections.forEach(section => {
               fullText += section.contents + '\n';
             });
-          });
-          Promise.all(chapterPromises).then(() => {
             textInput.value = fullText;
+          }).catch(err => {
+            alert('Error loading EPUB chapters: ' + err);
           });
         });
+      }).catch(err => {
+        alert('Error loading EPUB: ' + err);
       });
     };
     reader.readAsArrayBuffer(file);
@@ -183,72 +128,6 @@ function handleFiles(files) {
     alert('Unsupported file type.');
   }
 }
-
-// Dummy grammar check function (replace with real API or logic)
-function checkGrammar(text) {
-  // For demo: highlight 'bad' as error, 'good' as suggestion
-  const errors = [];
-  const patternError = /\b(bad)\b/gi;
-  const patternSuggest = /\b(good)\b/gi;
-
-  let newText = text;
-  let offset = 0;
-
-  // Highlight errors in red
-  newText = newText.replace(patternError, (match, p1, offsetPos) => {
-    errors.push({index: offsetPos + offset, length: match.length, type: 'error', message: 'Replace "bad"'});
-    return `<span class="error">${match}</span>`;
-  });
-  // Highlight suggestions in green
-  newText = newText.replace(patternSuggest, (match, p1, offsetPos) => {
-    errors.push({index: offsetPos + offset, length: match.length, type: 'suggestion', message: 'Replace "good"'});
-    return `<span class="suggestion">${match}</span>`;
-  });
-
-  return {text: newText, errors: errors};
-}
-
-// Show analyzed text with highlights
-function displayResult() {
-  const text = textInput.value;
-  const result = checkGrammar(text);
-  analyzedText = result.text;
-  resultDiv.innerHTML = result.text;
-  if (result.errors.length > 0) {
-    applyBtn.disabled = false;
-    downloadBtn.disabled = false;
-  } else {
-    applyBtn.disabled = true;
-    downloadBtn.disabled = true;
-  }
-}
-
-// Check button
-document.getElementById('check-btn').addEventListener('click', () => {
-  originalText = textInput.value;
-  displayResult();
-});
-
-// Apply fixes (simple replacements)
-document.getElementById('apply-btn').addEventListener('click', () => {
-  // For demo, just replace 'bad' with 'good'
-  let fixedText = originalText.replace(/\b(bad)\b/gi, 'good');
-  textInput.value = fixedText;
-  displayResult();
-});
-
-// Download corrected text
-downloadBtn.addEventListener('click', () => {
-  const blob = new Blob([textInput.value], {type: 'text/plain'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'corrected.txt';
-  a.click();
-  URL.revokeObjectURL(url);
-});
-
 </script>
-
 </body>
 </html>
