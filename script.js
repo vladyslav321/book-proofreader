@@ -1,27 +1,136 @@
-fetch("/api/check"
-function highlightErrors(text, matches) {
-    let offset = 0;
-    let html = text;
+const dropZone = document.getElementById("dropZone");
+const fileInput = document.getElementById("fileInput");
 
-    matches.forEach(match => {
-        const start = match.offset + offset;
-        const end = start + match.length;
+let lastMatches = [];
+let lastText = "";
 
-        const wrong = html.substring(start, end);
-        const suggestion = match.replacements[0]?.value || "";
+dropZone.addEventListener("click", () => fileInput.click());
 
-        const replacementHTML =
-            `<span class="error" data-suggestion="${suggestion}">
-                ${wrong}
-            </span>`;
+dropZone.addEventListener("dragover", e=>{
+    e.preventDefault();
+});
 
-        html =
-            html.substring(0, start) +
-            replacementHTML +
-            html.substring(end);
+dropZone.addEventListener("drop", e=>{
+    e.preventDefault();
+    handleFile(e.dataTransfer.files[0]);
+});
 
-        offset += replacementHTML.length - match.length;
+fileInput.addEventListener("change", ()=>{
+    handleFile(fileInput.files[0]);
+});
+
+function handleFile(file){
+    const reader = new FileReader();
+    const name = file.name.toLowerCase();
+
+    if(name.endsWith(".txt")){
+        reader.onload = e=>{
+            document.getElementById("textInput").value = e.target.result;
+        };
+        reader.readAsText(file);
+    }
+
+    else if(name.endsWith(".docx")){
+        reader.onload = function(event) {
+            mammoth.extractRawText({arrayBuffer: event.target.result})
+                .then(result=>{
+                    document.getElementById("textInput").value = result.value;
+                });
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    else if(name.endsWith(".epub")){
+        const book = ePub(file);
+        book.loaded.spine.then(() => {
+            let fullText = "";
+            book.spine.each(item => {
+                item.load(book.load.bind(book)).then(contents => {
+                    fullText += contents.document.body.innerText + "\n";
+                    item.unload();
+                    document.getElementById("textInput").value = fullText;
+                });
+            });
+        });
+    }
+
+    else if(name.endsWith(".fb2")){
+        reader.onload = function(e){
+            const parser = new DOMParser();
+            const xml = parser.parseFromString(e.target.result, "text/xml");
+            const body = xml.querySelector("body");
+            if(body){
+                document.getElementById("textInput").value = body.textContent;
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    else{
+        alert("Unsupported format");
+    }
+}
+
+async function checkText(){
+    const text = document.getElementById("textInput").value;
+    lastText = text;
+
+    const response = await fetch("/api/check", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ text })
     });
 
-    document.getElementById("output").innerHTML = html;
+    const data = await response.json();
+    lastMatches = data.matches;
+
+    highlightErrors(text, data.matches);
+}
+
+function highlightErrors(text, matches){
+    let result = "";
+    let lastIndex = 0;
+
+    matches.forEach(match=>{
+        const start = match.offset;
+        const end = start + match.length;
+
+        result += text.substring(lastIndex, start);
+
+        const wrong = text.substring(start, end);
+
+        result += `<span class="error">${wrong}</span>`;
+
+        lastIndex = end;
+    });
+
+    result += text.substring(lastIndex);
+
+    document.getElementById("output").innerHTML = result;
+}
+
+function applyFixes(){
+    let corrected = lastText;
+
+    lastMatches.reverse().forEach(match=>{
+        if(match.replacements.length > 0){
+            const suggestion = match.replacements[0].value;
+            corrected =
+                corrected.substring(0, match.offset) +
+                suggestion +
+                corrected.substring(match.offset + match.length);
+        }
+    });
+
+    document.getElementById("textInput").value = corrected;
+    document.getElementById("output").innerText = corrected;
+}
+
+function downloadText(){
+    const text = document.getElementById("textInput").value;
+    const blob = new Blob([text], {type:"text/plain"});
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "corrected.txt";
+    link.click();
 }
