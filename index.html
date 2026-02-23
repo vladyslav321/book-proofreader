@@ -1,22 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<meta charset="UTF-8">
+<title>English Text Checker PRO</title>
+
+<!-- Mammoth for DOCX -->
+<script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+
+<!-- EPUB Support -->
 <script src="https://cdn.jsdelivr.net/npm/jszip/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
-    <script src="script.js"></script>
-    <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
-<meta charset="UTF-8">
-<title>English Text Checker</title>
 
 <style>
 body{
-    font-family: Arial, sans-serif;
+    font-family: Arial;
+    max-width: 1000px;
+    margin: auto;
+    padding: 40px;
     background:#f5f6fa;
-    padding:40px;
-    max-width:1000px;
-    margin:auto;
 }
-h1{margin-bottom:10px;}
 #dropZone{
     border:2px dashed #888;
     padding:30px;
@@ -40,147 +42,33 @@ button{
     margin-top:20px;
     background:white;
     padding:20px;
-    border-radius:5px;
     min-height:150px;
     white-space:pre-wrap;
 }
 .error{
     background:#ffcccc;
-    color:#b30000;
-}
-.suggestion{
-    background:#ccffcc;
-    color:#006600;
 }
 </style>
 </head>
+
 <body>
 
-<h1>English Text Checker</h1>
+<h1>English Text Checker PRO</h1>
 
 <div id="dropZone">
-    Drag & Drop (.txt, .docx) here or click to upload
-    <input type="file" id="fileInput" hidden>
+Drag & Drop (.txt, .docx, .epub, .fb2) or Click
+<input type="file" id="fileInput" hidden>
 </div>
 
-<textarea id="textInput" placeholder="...or paste your text here"></textarea>
+<textarea id="textInput" placeholder="Or paste text here..."></textarea>
 
 <button onclick="checkText()">Check English</button>
 <button onclick="applyFixes()">Apply Fixes</button>
-<button onclick="downloadText()">Download Corrected Text</button>
+<button onclick="downloadText()">Download Corrected</button>
 
 <div id="output"></div>
 
-<script>
-let correctedText = "";
-
-const dropZone = document.getElementById("dropZone");
-const fileInput = document.getElementById("fileInput");
-
-dropZone.addEventListener("click", () => fileInput.click());
-
-dropZone.addEventListener("dragover", e=>{
-    e.preventDefault();
-    dropZone.style.background="#eef";
-});
-dropZone.addEventListener("dragleave", ()=>{
-    dropZone.style.background="white";
-});
-dropZone.addEventListener("drop", e=>{
-    e.preventDefault();
-    dropZone.style.background="white";
-    handleFile(e.dataTransfer.files[0]);
-});
-
-fileInput.addEventListener("change", ()=>{
-    handleFile(fileInput.files[0]);
-});
-
-function handleFile(file){
-
-    const reader = new FileReader();
-    const fileName = file.name.toLowerCase();
-
-    // TXT
-    if(fileName.endsWith(".txt")){
-        reader.onload = e=>{
-            document.getElementById("textInput").value = e.target.result;
-        };
-        reader.readAsText(file);
-    }
-
-    // DOCX
-    else if(fileName.endsWith(".docx")){
-        reader.onload = function(event) {
-            mammoth.extractRawText({arrayBuffer: event.target.result})
-                .then(result=>{
-                    document.getElementById("textInput").value = result.value;
-                });
-        };
-        reader.readAsArrayBuffer(file);
-    }
-
-    // EPUB
-    else if(fileName.endsWith(".epub")){
-        const book = ePub(file);
-
-        book.loaded.spine.then(() => {
-            let fullText = "";
-
-            book.spine.each(item => {
-                item.load(book.load.bind(book)).then(contents => {
-                    fullText += contents.document.body.innerText + "\n";
-                    item.unload();
-                    document.getElementById("textInput").value = fullText;
-                });
-            });
-        });
-    }
-
-    // FB2
-    else if(fileName.endsWith(".fb2")){
-        reader.onload = function(e){
-            const parser = new DOMParser();
-            const xml = parser.parseFromString(e.target.result, "text/xml");
-
-            const body = xml.querySelector("body");
-            if(body){
-                document.getElementById("textInput").value = body.textContent;
-            }
-        };
-        reader.readAsText(file);
-    }
-
-    else{
-        alert("Unsupported format");
-    }
-}
-async function checkText() {
-    const text = document.getElementById("textInput").value;
-
-    const response = await fetch("http://localhost:3000/check", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ text })
-    });
-
-    const data = await response.json();
-
-    highlightErrors(text, data.matches);
-}
-function applyFixes(){
-    document.getElementById("textInput").value = correctedText;
-    document.getElementById("output").innerText = correctedText;
-}
-
-function downloadText(){
-    const blob = new Blob([correctedText], {type:"text/plain"});
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "corrected_text.txt";
-    link.click();
-}
-</script>
+<script src="script.js"></script>
 
 </body>
 </html>
