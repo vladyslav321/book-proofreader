@@ -40,6 +40,29 @@ function handleFile(file){
         reader.readAsArrayBuffer(file);
     }
 
+else if(name.endsWith(".pdf")){
+    reader.onload = async function(e){
+
+        const typedArray = new Uint8Array(e.target.result);
+
+        const pdf = await pdfjsLib.getDocument({data: typedArray}).promise;
+
+        let fullText = "";
+
+        for(let i = 1; i <= pdf.numPages; i++){
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+
+            const strings = content.items.map(item => item.str);
+            fullText += strings.join(" ") + "\n\n";
+        }
+
+        document.getElementById("textInput").value = fullText;
+    };
+
+    reader.readAsArrayBuffer(file);
+}
+        
     else if(name.endsWith(".epub")){
         const book = ePub(file);
         book.loaded.spine.then(() => {
