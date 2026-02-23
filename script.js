@@ -107,6 +107,41 @@ else if(name.endsWith(".pdf")){
     }
 }
 
+async function chunkedGrammarCheck(text){
+
+    const chunkSize = 20000;
+    const chunks = [];
+    let offset = 0;
+
+    while(offset < text.length){
+        chunks.push(text.substring(offset, offset + chunkSize));
+        offset += chunkSize;
+    }
+
+    let allMatches = [];
+    let globalOffset = 0;
+
+    for(const chunk of chunks){
+
+        const response = await fetch("/api/check",{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({text:chunk})
+        });
+
+        const data = await response.json();
+
+        data.matches.forEach(match=>{
+            match.offset += globalOffset;
+            allMatches.push(match);
+        });
+
+        globalOffset += chunk.length;
+    }
+
+    return allMatches;
+}
+
 async function checkText(){
     const loader = document.getElementById("loader");
     loader.classList.remove("hidden");
