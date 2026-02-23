@@ -2,71 +2,153 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>English Text Checker PRO</title>
+<title>English Grammar Checker</title>
 
-<!-- Mammoth for DOCX -->
 <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<!-- EPUB Support -->
 <script src="https://cdn.jsdelivr.net/npm/jszip/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <style>
 body{
-    font-family: Arial;
-    max-width: 1000px;
-    margin: auto;
-    padding: 40px;
-    background:#f5f6fa;
+    margin:0;
+    font-family: Inter, Arial, sans-serif;
+    background:#f3f4f6;
 }
+
+.container{
+    max-width:1100px;
+    margin:60px auto;
+    background:white;
+    border-radius:12px;
+    padding:40px;
+    box-shadow:0 10px 30px rgba(0,0,0,0.05);
+}
+
+h1{
+    margin-bottom:25px;
+    font-size:28px;
+    font-weight:600;
+}
+
 #dropZone{
-    border:2px dashed #888;
+    border:2px dashed #d1d5db;
+    border-radius:8px;
     padding:30px;
     text-align:center;
+    color:#6b7280;
     margin-bottom:20px;
-    background:white;
     cursor:pointer;
+    transition:0.2s;
 }
+
+#dropZone:hover{
+    border-color:#2563eb;
+    color:#2563eb;
+}
+
 textarea{
     width:100%;
-    height:200px;
-    padding:10px;
-    margin-bottom:15px;
+    height:220px;
+    border:1px solid #e5e7eb;
+    border-radius:8px;
+    padding:15px;
+    font-size:14px;
+    resize:none;
+    margin-bottom:20px;
 }
+
+.actions{
+    display:flex;
+    gap:12px;
+    margin-bottom:20px;
+}
+
 button{
-    padding:10px 15px;
-    margin-right:10px;
+    padding:10px 18px;
+    border:none;
+    border-radius:6px;
+    font-weight:500;
     cursor:pointer;
+    transition:0.2s;
 }
+
+.primary{
+    background:#2563eb;
+    color:white;
+}
+
+.primary:hover{
+    background:#1e40af;
+}
+
+.secondary{
+    background:#e5e7eb;
+}
+
+.secondary:hover{
+    background:#d1d5db;
+}
+
 #output{
-    margin-top:20px;
-    background:white;
+    border:1px solid #e5e7eb;
+    border-radius:8px;
     padding:20px;
     min-height:150px;
     white-space:pre-wrap;
 }
+
 .error{
-    background:#ffcccc;
+    background:#fee2e2;
+    border-bottom:2px solid #ef4444;
+}
+
+/* Progress bar */
+.progress-container{
+    width:100%;
+    height:6px;
+    background:#e5e7eb;
+    border-radius:4px;
+    overflow:hidden;
+    margin-bottom:20px;
+    display:none;
+}
+
+.progress-bar{
+    height:100%;
+    width:0%;
+    background:#2563eb;
+    transition:width 0.3s;
 }
 </style>
 </head>
 
 <body>
 
-<h1>English Text Checker PRO</h1>
+<div class="container">
+
+<h1>English Grammar Checker</h1>
 
 <div id="dropZone">
-Drag & Drop (.txt, .docx, .epub, .fb2) or Click
+Drag & Drop (.txt, .docx, .epub, .fb2, .pdf) or Click
 <input type="file" id="fileInput" hidden>
 </div>
 
-<textarea id="textInput" placeholder="Or paste text here..."></textarea>
+<div class="progress-container" id="progressContainer">
+    <div class="progress-bar" id="progressBar"></div>
+</div>
 
-<button onclick="checkText()">Check English</button>
-<button onclick="applyFixes()">Apply Fixes</button>
-<button onclick="downloadText()">Download Corrected</button>
+<textarea id="textInput" placeholder="Paste your text here..."></textarea>
+
+<div class="actions">
+    <button class="primary" onclick="checkText()">Check English</button>
+    <button class="secondary" onclick="applyFixes()">Apply Fixes</button>
+    <button class="secondary" onclick="downloadText()">Download</button>
+</div>
 
 <div id="output"></div>
+
+</div>
 
 <script src="script.js"></script>
 
