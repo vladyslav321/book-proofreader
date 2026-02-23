@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Free Book Proofreader (English)</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 20px; }
+    h1 { text-align: center; }
+    #drop-zone { border: 2px dashed #aaa; padding: 40px; text-align: center; margin: 20px 0; cursor: pointer; background: #f9f9f9; }
+    #drop-zone.highlight { border-color: #007bff; background: #e7f3ff; }
+    textarea { width: 100%; height: 200px; margin: 10px 0; }
+    button { padding: 10px 20px; font-size: 16px; margin: 10px 5px; cursor: pointer; }
+    #result { white-space: pre-wrap; border: 1px solid #ddd; padding: 15px; min-height: 200px; background: #fff; }
+    .error { background: #ffe6e6; color: #c00; }
+    .suggestion { background: #e6ffe6; }
+    #status { color: #666; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>Free English Book Proofreader</h1>
+  <p>Upload .txt or paste your chapter (up to ~4000 words at a time). Powered by LanguageTool (free).</p>
+
+  <div id="drop-zone">Drag & drop your .txt file here<br>or click to select</div>
+  <input type="file" id="file-input" accept=".txt,.docx" style="display:none;">
+  <textarea id="text-input" placeholder="Or paste your text here..."></textarea>
+
+  <button id="check-btn">Check Grammar & Style</button>
+  <button id="apply-btn" disabled>Apply Suggested Fixes</button>
+  <button id="download-btn" disabled>Download Corrected Text</button>
+
+  <div id="status"></div>
+  <div id="result"></div>
+
+  <script src="https://unpkg.com/mammoth@1.6.0/mammoth.browser.min.js"></script>
+  <script>
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const textInput = document.getElementById('text-input');
+    const checkBtn = document.getElementById('check-btn');
+    const applyBtn = document.getElementById('apply-btn');
+    const downloadBtn = document.getElementById('download-btn');
+    const resultDiv = document.getElementById('result');
+    const status = document.getElementById('status');
+
+    let originalText = '';
+    let matches = [];
+    let correctedText = '';
+
+    // Drag & drop
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', handleFile);
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('highlight'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('highlight'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('highlight');
+      handleFile(e.dataTransfer.files[0]);
+    });
+
+    function handleFile(fileOrEvent) {
+      let file = fileOrEvent instanceof File ? fileOrEvent : fileOrEvent.target.files[0];
+      if (!file) return;
+      status.textContent = 'Reading file...';
+
+      if (file.name.endsWith('.txt')) {
+        const reader = new FileReader();
+        reader.onload = e => {
+          textInput.value = e.target.result;
+          status.textContent = 'Text loaded. Click "Check"';
+        };
+        reader.readAsText(file);
+      } else if (file.name.endsWith('.docx')) {
+        const reader = new FileReader();
+        reader.onload = e => {
+          mammoth.extractRawText({arrayBuffer: e.target.result})
+            .then(result => {
+              textInput.value = result.value;
+              status.textContent = 'DOCX loaded. Click "Check"';
+            })
+            .catch(err => status.textContent = 'Error reading DOCX');
+        };
+        reader.readAsArrayBuffer(file);
+      }
+    }
+
+    checkBtn.addEventListener('click', async () => {
+      const text = textInput.value.trim();
+      if (!text) return alert('Paste or upload text first');
+      status.textContent = 'Checking... (may take 5–30 sec)';
+      resultDiv.innerHTML = '';
+
+      try {
+        const formData = new FormData();
+        formData.append('text', text);
+        formData.append('language', 'en-US');
+        formData.append('enabledOnly', 'false');
+
+        const response = await fetch('https://api.languagetool.org/v2/check', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) throw new Error('API error');
+        const data = await response.json();
+
+        matches = data.matches || [];
+        originalText = text;
+        correctedText = text;
+
+        if (matches.length === 0) {
+          resultDiv.innerHTML = '<p style="color:green">No errors found! 🎉</p>';
+        } else {
+          let html = text;
+          let offset = 0;
+          matches.forEach(m => {
+            const start = m.offset + offset;
+            const end = start + m.length;
+            const issue = m.shortMessage || m.message;
+            const repl = m.replacements[0]?.value || '';
+
+            html = html.slice(0, start) +
+                   `<span class="error" title="${issue}">${html.slice(start, end)}</span>` +
+                   (repl ? `<span class="suggestion" title="Suggested: ${repl}">${repl}</span>` : '') +
+                   html.slice(end);
+
+            if (repl) {
+              offset += repl.length - m.length;
+              correctedText = correctedText.slice(0, m.offset + offset - repl.length + m.length) +
+                              repl +
+                              correctedText.slice(m.offset + offset);
+            }
+          });
+          resultDiv.innerHTML = html;
+        }
+
+        applyBtn.disabled = matches.length === 0;
+        downloadBtn.disabled = false;
+        status.textContent = `Found ${matches.length} issues.`;
+      } catch (err) {
+        status.textContent = 'Error: ' + err.message + ' (try smaller text or wait 1 min)';
+      }
+    });
+
+    applyBtn.addEventListener('click', () => {
+      textInput.value = correctedText;
+      resultDiv.innerHTML = correctedText.replace(/\n/g, '<br>');
+      status.textContent = 'Fixes applied!';
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      const blob = new Blob([correctedText || originalText], {type: 'text/plain'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'corrected.txt';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  </script>
+</body>
+</html>
