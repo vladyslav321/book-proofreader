@@ -51,16 +51,13 @@
   let matches = [];
   let correctedText = '';
 
-  // Drag & drop + click
-  dropZone.addEventListener('click', () => fileInput.click());
-  fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
-  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('highlight'); });
-  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('highlight'));
-  dropZone.addEventListener('drop', e => {
-    e.preventDefault();
-    dropZone.classList.remove('highlight');
-    handleFile(e.dataTransfer.files[0]);
-  });
+  // Drag & drop + click — робимо drop-zone як label
+dropZone.addEventListener('click', () => fileInput.click());  // це можна залишити, але воно не завжди працює
+
+// Краще: зробимо drop-zone "натискабельним" через label
+// Але простіше — просто покажи input видимим або використовуй label
+
+// Оновлений обробник кліку (але головне — нижче)
 
   async function handleFile(file) {
     if (!file) return;
