@@ -43,21 +43,34 @@ function handleFile(file){
 else if(name.endsWith(".pdf")){
     reader.onload = async function(e){
 
-        const typedArray = new Uint8Array(e.target.result);
+        const progressContainer = document.getElementById("progressContainer");
+        const progressBar = document.getElementById("progressBar");
 
+        progressContainer.style.display = "block";
+        progressBar.style.width = "0%";
+
+        const typedArray = new Uint8Array(e.target.result);
         const pdf = await pdfjsLib.getDocument({data: typedArray}).promise;
 
         let fullText = "";
 
         for(let i = 1; i <= pdf.numPages; i++){
+
             const page = await pdf.getPage(i);
             const content = await page.getTextContent();
-
             const strings = content.items.map(item => item.str);
+
             fullText += strings.join(" ") + "\n\n";
+
+            const progress = Math.round((i / pdf.numPages) * 100);
+            progressBar.style.width = progress + "%";
         }
 
         document.getElementById("textInput").value = fullText;
+
+        setTimeout(()=>{
+            progressContainer.style.display = "none";
+        },500);
     };
 
     reader.readAsArrayBuffer(file);
