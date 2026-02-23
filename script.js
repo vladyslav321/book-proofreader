@@ -108,19 +108,19 @@ else if(name.endsWith(".pdf")){
 }
 
 async function checkText(){
+    const loader = document.getElementById("loader");
+    loader.classList.remove("hidden");
+
     const text = document.getElementById("textInput").value;
+
+    const matches = await chunkedGrammarCheck(text);
+
+    loader.classList.add("hidden");
+
+    lastMatches = matches;
     lastText = text;
 
-    const response = await fetch("/api/check", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ text })
-    });
-
-    const data = await response.json();
-    lastMatches = data.matches;
-
-    highlightErrors(text, data.matches);
+    highlightErrors(text, matches);
 }
 
 function highlightErrors(text, matches){
