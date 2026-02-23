@@ -33,130 +33,155 @@
   <div id="result"></div>
 
   <script src="https://unpkg.com/mammoth@1.6.0/mammoth.browser.min.js"></script>
-  <script>
-    const dropZone = document.getElementById('drop-zone');
-    const fileInput = document.getElementById('file-input');
-    const textInput = document.getElementById('text-input');
-    const checkBtn = document.getElementById('check-btn');
-    const applyBtn = document.getElementById('apply-btn');
-    const downloadBtn = document.getElementById('download-btn');
-    const resultDiv = document.getElementById('result');
-    const status = document.getElementById('status');
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.432/pdf.min.mjs" type="module"></script>
+<script type="module">
+  // pdf.js налаштування (обов'язково для worker)
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.7.432/pdf.worker.min.mjs';
 
-    let originalText = '';
-    let matches = [];
-    let correctedText = '';
+  const dropZone = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('file-input');
+  const textInput = document.getElementById('text-input');
+  const checkBtn = document.getElementById('check-btn');
+  const applyBtn = document.getElementById('apply-btn');
+  const downloadBtn = document.getElementById('download-btn');
+  const resultDiv = document.getElementById('result');
+  const status = document.getElementById('status');
 
-    // Drag & drop
-    dropZone.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', handleFile);
-    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('highlight'); });
-    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('highlight'));
-    dropZone.addEventListener('drop', e => {
-      e.preventDefault();
-      dropZone.classList.remove('highlight');
-      handleFile(e.dataTransfer.files[0]);
-    });
+  let originalText = '';
+  let matches = [];
+  let correctedText = '';
 
-    function handleFile(fileOrEvent) {
-      let file = fileOrEvent instanceof File ? fileOrEvent : fileOrEvent.target.files[0];
-      if (!file) return;
-      status.textContent = 'Reading file...';
+  // Drag & drop + click
+  dropZone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('highlight'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('highlight'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('highlight');
+    handleFile(e.dataTransfer.files[0]);
+  });
 
+  async function handleFile(file) {
+    if (!file) return;
+    status.textContent = 'Reading file...';
+    textInput.value = ''; // очищуємо поле
+
+    try {
       if (file.name.endsWith('.txt')) {
-        const reader = new FileReader();
-        reader.onload = e => {
-          textInput.value = e.target.result;
-          status.textContent = 'Text loaded. Click "Check"';
-        };
-        reader.readAsText(file);
-      } else if (file.name.endsWith('.docx')) {
-        const reader = new FileReader();
-        reader.onload = e => {
-          mammoth.extractRawText({arrayBuffer: e.target.result})
-            .then(result => {
-              textInput.value = result.value;
-              status.textContent = 'DOCX loaded. Click "Check"';
-            })
-            .catch(err => status.textContent = 'Error reading DOCX');
-        };
-        reader.readAsArrayBuffer(file);
-      }
-    }
-
-    checkBtn.addEventListener('click', async () => {
-      const text = textInput.value.trim();
-      if (!text) return alert('Paste or upload text first');
-      status.textContent = 'Checking... (may take 5–30 sec)';
-      resultDiv.innerHTML = '';
-
-      try {
-        const formData = new FormData();
-        formData.append('text', text);
-        formData.append('language', 'en-US');
-        formData.append('enabledOnly', 'false');
-
-        const response = await fetch('https://api.languagetool.org/v2/check', {
-          method: 'POST',
-          body: formData
-        });
-
-        if (!response.ok) throw new Error('API error');
-        const data = await response.json();
-
-        matches = data.matches || [];
-        originalText = text;
-        correctedText = text;
-
-        if (matches.length === 0) {
-          resultDiv.innerHTML = '<p style="color:green">No errors found! 🎉</p>';
-        } else {
-          let html = text;
-          let offset = 0;
-          matches.forEach(m => {
-            const start = m.offset + offset;
-            const end = start + m.length;
-            const issue = m.shortMessage || m.message;
-            const repl = m.replacements[0]?.value || '';
-
-            html = html.slice(0, start) +
-                   `<span class="error" title="${issue}">${html.slice(start, end)}</span>` +
-                   (repl ? `<span class="suggestion" title="Suggested: ${repl}">${repl}</span>` : '') +
-                   html.slice(end);
-
-            if (repl) {
-              offset += repl.length - m.length;
-              correctedText = correctedText.slice(0, m.offset + offset - repl.length + m.length) +
-                              repl +
-                              correctedText.slice(m.offset + offset);
-            }
-          });
-          resultDiv.innerHTML = html;
+        const text = await file.text();
+        textInput.value = text;
+        status.textContent = 'TXT loaded. Click "Check"';
+      } 
+      else if (file.name.endsWith('.docx')) {
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({arrayBuffer});
+        textInput.value = result.value;
+        status.textContent = 'DOCX loaded. Click "Check"';
+      } 
+      else if (file.name.toLowerCase().endsWith('.pdf')) {
+        status.textContent = 'Extracting text from PDF... (may take time for large files)';
+        
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+        
+        let fullText = '';
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          const page = await pdf.getPage(pageNum);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map(item => item.str).join(' ');
+          fullText += pageText + '\n\n'; // додаємо роздільник між сторінками
+          status.textContent = `Extracted page ${pageNum} of ${pdf.numPages}...`;
         }
-
-        applyBtn.disabled = matches.length === 0;
-        downloadBtn.disabled = false;
-        status.textContent = `Found ${matches.length} issues.`;
-      } catch (err) {
-        status.textContent = 'Error: ' + err.message + ' (try smaller text or wait 1 min)';
+        
+        textInput.value = fullText.trim();
+        status.textContent = 'PDF text extracted! Click "Check"';
+      } 
+      else {
+        status.textContent = 'Unsupported file type. Use .txt, .docx or .pdf';
       }
-    });
+    } catch (err) {
+      status.textContent = 'Error reading file: ' + err.message;
+      console.error(err);
+    }
+  }
 
-    applyBtn.addEventListener('click', () => {
-      textInput.value = correctedText;
-      resultDiv.innerHTML = correctedText.replace(/\n/g, '<br>');
-      status.textContent = 'Fixes applied!';
-    });
+  checkBtn.addEventListener('click', async () => {
+    const text = textInput.value.trim();
+    if (!text) return alert('Paste or upload text first');
+    status.textContent = 'Checking... (may take 5–60 sec for large text)';
+    resultDiv.innerHTML = '';
 
-    downloadBtn.addEventListener('click', () => {
-      const blob = new Blob([correctedText || originalText], {type: 'text/plain'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'corrected.txt';
-      a.click();
-      URL.revokeObjectURL(url);
-    });
-  </script>
+    try {
+      const formData = new FormData();
+      formData.append('text', text);
+      formData.append('language', 'en-US');
+      formData.append('enabledOnly', 'false');
+
+      const response = await fetch('https://api.languagetool.org/v2/check', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) throw new Error('API error: ' + response.status);
+      const data = await response.json();
+
+      matches = data.matches || [];
+      originalText = text;
+      correctedText = text;
+
+      if (matches.length === 0) {
+        resultDiv.innerHTML = '<p style="color:green">No errors found! 🎉</p>';
+      } else {
+        let html = text.replace(/\n/g, '<br>');
+        let offset = 0;
+        matches.forEach(m => {
+          const start = m.offset + offset;
+          const end = start + m.length;
+          const issue = (m.shortMessage || m.message).replace(/"/g, '&quot;');
+          const repl = m.replacements[0]?.value || '';
+
+          const errorPart = html.slice(start, end);
+          html = html.slice(0, start) +
+                 `<span class="error" title="${issue}">${errorPart}</span>` +
+                 (repl ? `<span class="suggestion" title="Suggested: ${repl.replace(/"/g, '&quot;')}">${repl}</span>` : '') +
+                 html.slice(end);
+
+          if (repl) {
+            const diff = repl.length - m.length;
+            offset += diff;
+            correctedText = correctedText.slice(0, m.offset + offset - repl.length + m.length) + repl + correctedText.slice(m.offset + offset);
+          }
+        });
+        resultDiv.innerHTML = html;
+      }
+
+      applyBtn.disabled = matches.length === 0;
+      downloadBtn.disabled = false;
+      status.textContent = `Found ${matches.length} issues.`;
+    } catch (err) {
+      status.textContent = 'Error: ' + err.message + ' (try smaller text, wait 1 min, or check internet)';
+      console.error(err);
+    }
+  });
+
+  applyBtn.addEventListener('click', () => {
+    textInput.value = correctedText;
+    resultDiv.innerHTML = correctedText.replace(/\n/g, '<br>');
+    status.textContent = 'Fixes applied!';
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    const content = correctedText || originalText;
+    const blob = new Blob([content], {type: 'text/plain'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'corrected-manuscript.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+</script>
+  
 </body>
 </html>
