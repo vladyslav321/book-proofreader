@@ -1,3 +1,4 @@
+fetch("/api/check"
 function highlightErrors(text, matches) {
     let offset = 0;
     let html = text;
