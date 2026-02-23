@@ -1,160 +1,166 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Multi-format Text Loader with Progress</title>
-<!-- Include external libraries -->
-<script src="https://mozilla.github.io/pdf.js/build/pdf.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mammoth/mammoth.browser.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
+<meta charset="UTF-8">
+<title>English Text Checker</title>
+
+<script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+
 <style>
-  #status {
-    margin-top: 10px;
-    font-weight: bold;
-  }
+body{
+    font-family: Arial, sans-serif;
+    background:#f5f6fa;
+    padding:40px;
+    max-width:1000px;
+    margin:auto;
+}
+h1{margin-bottom:10px;}
+#dropZone{
+    border:2px dashed #888;
+    padding:30px;
+    text-align:center;
+    margin-bottom:20px;
+    background:white;
+    cursor:pointer;
+}
+textarea{
+    width:100%;
+    height:200px;
+    padding:10px;
+    margin-bottom:15px;
+}
+button{
+    padding:10px 15px;
+    margin-right:10px;
+    cursor:pointer;
+}
+#output{
+    margin-top:20px;
+    background:white;
+    padding:20px;
+    border-radius:5px;
+    min-height:150px;
+    white-space:pre-wrap;
+}
+.error{
+    background:#ffcccc;
+    color:#b30000;
+}
+.suggestion{
+    background:#ccffcc;
+    color:#006600;
+}
 </style>
 </head>
 <body>
-<h2>Select a file to load:</h2>
-<input type="file" id="fileInput" />
-<button id="checkBtn">Check</button>
-<br/><br/>
-<textarea id="textInput" rows="20" cols="100" placeholder="Extracted text will appear here..."></textarea>
-<div id="status"></div>
+
+<h1>English Text Checker</h1>
+
+<div id="dropZone">
+    Drag & Drop (.txt, .docx) here or click to upload
+    <input type="file" id="fileInput" hidden>
+</div>
+
+<textarea id="textInput" placeholder="...or paste your text here"></textarea>
+
+<button onclick="checkText()">Check English</button>
+<button onclick="applyFixes()">Apply Fixes</button>
+<button onclick="downloadText()">Download Corrected Text</button>
+
+<div id="output"></div>
 
 <script>
-const fileInput = document.getElementById('fileInput');
-const checkBtn = document.getElementById('checkBtn');
-const textInput = document.getElementById('textInput');
-const statusDiv = document.getElementById('status');
+let correctedText = "";
 
-checkBtn.addEventListener('click', () => {
-  handleFiles(fileInput.files);
+const dropZone = document.getElementById("dropZone");
+const fileInput = document.getElementById("fileInput");
+
+dropZone.addEventListener("click", () => fileInput.click());
+
+dropZone.addEventListener("dragover", e=>{
+    e.preventDefault();
+    dropZone.style.background="#eef";
+});
+dropZone.addEventListener("dragleave", ()=>{
+    dropZone.style.background="white";
+});
+dropZone.addEventListener("drop", e=>{
+    e.preventDefault();
+    dropZone.style.background="white";
+    handleFile(e.dataTransfer.files[0]);
 });
 
-function showStatus(message) {
-  statusDiv.innerText = message;
+fileInput.addEventListener("change", ()=>{
+    handleFile(fileInput.files[0]);
+});
+
+function handleFile(file){
+    const reader = new FileReader();
+
+    if(file.name.endsWith(".txt")){
+        reader.onload = e=>{
+            document.getElementById("textInput").value = e.target.result;
+        };
+        reader.readAsText(file);
+    }
+
+    else if(file.name.endsWith(".docx")){
+        reader.onload = function(event) {
+            mammoth.extractRawText({arrayBuffer: event.target.result})
+                .then(result=>{
+                    document.getElementById("textInput").value = result.value;
+                });
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    else{
+        alert("Unsupported format in demo version.");
+    }
 }
 
-function handleFiles(files) {
-  if (files.length === 0) {
-    alert('Please select a file first.');
-    return;
-  }
-  const file = files[0];
-  const filename = file.name.toLowerCase();
+function checkText(){
+    const text = document.getElementById("textInput").value;
+    let output = text;
 
-  // Clear previous content and status
-  textInput.value = '';
-  showStatus('Processing...');
+    // Simple demo rules
+    const rules = [
+        {wrong:"teh", correct:"the"},
+        {wrong:"recieve", correct:"receive"},
+        {wrong:"dont", correct:"don't"},
+        {wrong:"im", correct:"I'm"}
+    ];
 
-  if (filename.endsWith('.txt')) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      textInput.value = reader.result;
-      showStatus('Done.');
-    };
-    reader.readAsText(file);
+    rules.forEach(rule=>{
+        const regex = new RegExp("\\b"+rule.wrong+"\\b","gi");
+        output = output.replace(regex, 
+            `<span class="error">${rule.wrong}</span>
+             <span class="suggestion">(${rule.correct})</span>`
+        );
+    });
 
-  } else if (filename.endsWith('.docx')) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      mammoth.convertToHtml({buffer: e.target.result})
-        .then(result => {
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = result.value;
-          textInput.value = tempDiv.innerText;
-          showStatus('Done.');
-        })
-        .catch(err => {
-          alert('Error parsing DOCX: ' + err);
-          showStatus('Error.');
-        });
-    };
-    reader.readAsArrayBuffer(file);
+    correctedText = text;
+    rules.forEach(rule=>{
+        const regex = new RegExp("\\b"+rule.wrong+"\\b","gi");
+        correctedText = correctedText.replace(regex, rule.correct);
+    });
 
-  } else if (filename.endsWith('.pdf')) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const loadingTask = pdfjsLib.getDocument({data: e.target.result});
-      loadingTask.promise.then(pdf => {
-        let maxPages = Math.min(pdf.numPages, 10); // limit pages for performance
-        let loadedPages = 0;
-        let fullText = '';
+    document.getElementById("output").innerHTML = output;
+}
 
-        for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
-          pdf.getPage(pageNum).then(page => {
-            page.getTextContent().then(textContent => {
-              const pageText = textContent.items.map(item => item.str).join(' ');
-              fullText += pageText + '\n';
-              loadedPages++;
-              if (loadedPages === maxPages) {
-                textInput.value = fullText;
-                showStatus('Done.');
-              }
-            });
-          });
-        }
-      }).catch(err => {
-        alert('Error loading PDF: ' + err);
-        showStatus('Error.');
-      });
-    };
-    reader.readAsArrayBuffer(file);
+function applyFixes(){
+    document.getElementById("textInput").value = correctedText;
+    document.getElementById("output").innerText = correctedText;
+}
 
-  } else if (filename.endsWith('.fb2')) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(reader.result, "application/xml");
-        const bodies = xmlDoc.getElementsByTagName('body');
-        let fb2Text = '';
-        for (let i = 0; i < bodies.length; i++) {
-          fb2Text += bodies[i].textContent + '\n';
-        }
-        textInput.value = fb2Text;
-        showStatus('Done.');
-      } catch (err) {
-        alert('Error parsing FB2: ' + err);
-        showStatus('Error.');
-      }
-    };
-    reader.readAsText(file);
-
-  } else if (filename.endsWith('.epub')) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const book = ePub(reader.result);
-      book.loaded.navigation.then(() => {
-        book.loaded.spine.then(spine => {
-          const spineItems = spine.spineItems;
-          const chapterPromises = spineItems.map(item => item.load());
-
-          Promise.all(chapterPromises).then(sections => {
-            let fullText = '';
-            sections.forEach(section => {
-              fullText += section.contents + '\n';
-            });
-            textInput.value = fullText;
-            showStatus('Done.');
-          }).catch(err => {
-            alert('Error loading EPUB chapters: ' + err);
-            showStatus('Error.');
-          });
-        });
-      }).catch(err => {
-        alert('Error loading EPUB: ' + err);
-        showStatus('Error.');
-      });
-    };
-    reader.readAsArrayBuffer(file);
-  } else {
-    alert('Unsupported file type.');
-    showStatus('Unsupported file type.');
-  }
+function downloadText(){
+    const blob = new Blob([correctedText], {type:"text/plain"});
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "corrected_text.txt";
+    link.click();
 }
 </script>
+
 </body>
 </html>
