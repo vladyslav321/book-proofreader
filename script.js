@@ -1,6 +1,19 @@
 const dropZone = document.getElementById("dropZone");
 const fileInput = document.getElementById("fileInput");
 
+const textInput = document.getElementById("textInput");
+
+textInput.addEventListener("input", updateCounter);
+
+function updateCounter(){
+    const text = textInput.value;
+    const words = text.trim().split(/\s+/).filter(Boolean).length;
+    const chars = text.length;
+
+    document.getElementById("counter").innerText =
+        `Words: ${words} | Characters: ${chars}`;
+}
+
 let lastMatches = [];
 let lastText = "";
 
